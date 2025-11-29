@@ -9,50 +9,48 @@
 <body>
   <div class="app">
     <h1>Puerto Rico Opening Helper</h1>
-    <p class="subtitle">Round 1 – first 3–4 decisions, 2-player</p>
+    <p class="subtitle">2-player official variant – Round 1 focus</p>
 
     <section class="card">
-      <h2>Starting Setup</h2>
+      <h2>2-Player Setup (fixed)</h2>
+      <p class="hint">
+        Official 2-player variant: Governor starts with <b>Indigo + 3 doubloons</b>,
+        second player with <b>Corn + 2 doubloons</b>. We hard-code the plantations
+        and you can adjust doubloons if they change mid-round.
+      </p>
+
       <div class="field-row">
-        <label for="your-start">Your starting plantation</label>
-        <select id="your-start">
-          <option value="Corn">Corn</option>
-          <option value="Indigo">Indigo</option>
-        </select>
+        <label>Your doubloons</label>
+        <input id="your-doubloons" type="number" min="0" value="3" />
       </div>
 
       <div class="field-row">
-        <label for="opp-start">Opponent starting plantation</label>
-        <select id="opp-start">
-          <option value="Corn">Corn</option>
-          <option value="Indigo">Indigo</option>
-        </select>
-      </div>
-
-      <div class="field-row">
-        <label for="your-doubloons">Your doubloons</label>
-        <input id="your-doubloons" type="number" min="0" value="2" />
-      </div>
-
-      <div class="field-row">
-        <label for="opp-doubloons">Opponent doubloons</label>
+        <label>Opponent doubloons</label>
         <input id="opp-doubloons" type="number" min="0" value="2" />
       </div>
 
       <div class="field-row">
-        <label for="turn-number">Your turn number in round 1</label>
+        <label for="turn-number">Your pick number in this round</label>
         <select id="turn-number">
           <option value="1">1st pick of the round</option>
           <option value="2">2nd pick of the round</option>
           <option value="3">3rd pick of the round</option>
           <option value="4">4th pick of the round</option>
+          <option value="5">5th pick of the round</option>
+          <option value="6">6th pick of the round</option>
         </select>
       </div>
+
+      <p class="hint">
+        In the official 2-player rules, each round both players alternate choosing
+        roles until each has taken 3 (6 total), leaving 1 unused role with a coin.
+        This selector is just telling the helper how early/late in the round you are.
+      </p>
     </section>
 
     <section class="card">
       <h2>Face-up Plantations</h2>
-      <p class="hint">Leave extra slots as “None” if fewer tiles are showing.</p>
+      <p class="hint">2-player = 3 face-up tiles. Leave any unused slot as “None”.</p>
 
       <div class="field-row">
         <label for="p1">Tile 1</label>
@@ -87,22 +85,14 @@
           <option value="Coffee">Coffee</option>
         </select>
       </div>
-      <div class="field-row">
-        <label for="p4">Tile 4</label>
-        <select id="p4" class="plantation">
-          <option value="None">None</option>
-          <option value="Corn">Corn</option>
-          <option value="Indigo">Indigo</option>
-          <option value="Sugar">Sugar</option>
-          <option value="Tobacco">Tobacco</option>
-          <option value="Coffee">Coffee</option>
-        </select>
-      </div>
     </section>
 
     <section class="card">
       <h2>Available Roles</h2>
-      <p class="hint">Check roles that you can choose right now.</p>
+      <p class="hint">
+        Check the roles that are still available when it’s your turn to pick.
+        (Official 2-player: 7 total roles, 6 chosen each round, 1 left over.)
+      </p>
       <div class="roles">
         <label><input type="checkbox" class="role" value="Settler" checked /> Settler</label>
         <label><input type="checkbox" class="role" value="Mayor" checked /> Mayor</label>
@@ -115,9 +105,9 @@
     </section>
 
     <section class="card">
-      <h2>Opponent’s Last Move (optional)</h2>
+      <h2>Opponent’s Last Pick (optional)</h2>
       <div class="field-row">
-        <label for="opp-last-role">Role they just picked</label>
+        <label for="opp-last-role">Role they just chose</label>
         <select id="opp-last-role">
           <option value="">(none / unknown)</option>
           <option value="Settler">Settler</option>
@@ -129,6 +119,10 @@
           <option value="Prospector">Prospector</option>
         </select>
       </div>
+      <p class="hint">
+        This doesn’t affect the math much yet but gives context and will matter more
+        as we refine the engine.
+      </p>
     </section>
 
     <button id="recommend-btn">Recommend my move</button>
