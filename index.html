@@ -54,12 +54,15 @@
       </p>
 
       <p id="round-turn-display" class="hint">
-        Turn in this round: 1 of 6 – it is your pick.
+        Round 1 – Turn 1 of 6 – it is your pick.
       </p>
     </section>
 
     <section class="card">
       <h2>Your current engine</h2>
+      <p id="round-summary" class="hint">
+        Round 1 – Turn 1 of 6.
+      </p>
       <p id="your-plantations-display" class="hint">
         Starting crop: (set by Governor). Extra plantations: none yet. Quarries: 0.
       </p>
@@ -172,10 +175,42 @@
         <label for="opp-builder-building">If Builder: what did they build?</label>
         <select id="opp-builder-building">
           <option value="">(n/a or unknown)</option>
-          <option value="Small Indigo Plant">Small Indigo Plant</option>
-          <option value="Sugar Mill">Sugar Mill</option>
-          <option value="Small Market">Small Market</option>
-          <option value="Hacienda">Hacienda</option>
+
+          <optgroup label="Small production">
+            <option value="Small Indigo Plant">Small Indigo Plant</option>
+            <option value="Small Sugar Mill">Small Sugar Mill</option>
+          </optgroup>
+
+          <optgroup label="Large production">
+            <option value="Indigo Plant">Indigo Plant</option>
+            <option value="Sugar Mill">Sugar Mill</option>
+            <option value="Tobacco Storage">Tobacco Storage</option>
+            <option value="Coffee Roaster">Coffee Roaster</option>
+          </optgroup>
+
+          <optgroup label="Violet buildings">
+            <option value="Small Market">Small Market</option>
+            <option value="Hacienda">Hacienda</option>
+            <option value="Construction Hut">Construction Hut</option>
+            <option value="Small Warehouse">Small Warehouse</option>
+            <option value="Hospice">Hospice</option>
+            <option value="Office">Office</option>
+            <option value="Large Market">Large Market</option>
+            <option value="Large Warehouse">Large Warehouse</option>
+            <option value="University">University</option>
+            <option value="Factory">Factory</option>
+            <option value="Harbor">Harbor</option>
+            <option value="Wharf">Wharf</option>
+          </optgroup>
+
+          <optgroup label="Large buildings">
+            <option value="Guild Hall">Guild Hall</option>
+            <option value="Residence">Residence</option>
+            <option value="Fortress">Fortress</option>
+            <option value="Customs House">Customs House</option>
+            <option value="City Hall">City Hall</option>
+          </optgroup>
+
           <option value="Other">Other / unknown</option>
         </select>
       </div>
@@ -232,10 +267,42 @@
           <label for="manual-building">If Builder: what did you build?</label>
           <select id="manual-building">
             <option value="">(n/a)</option>
-            <option value="Small Indigo Plant">Small Indigo Plant</option>
-            <option value="Sugar Mill">Sugar Mill</option>
-            <option value="Small Market">Small Market</option>
-            <option value="Hacienda">Hacienda</option>
+
+            <optgroup label="Small production">
+              <option value="Small Indigo Plant">Small Indigo Plant</option>
+              <option value="Small Sugar Mill">Small Sugar Mill</option>
+            </optgroup>
+
+            <optgroup label="Large production">
+              <option value="Indigo Plant">Indigo Plant</option>
+              <option value="Sugar Mill">Sugar Mill</option>
+              <option value="Tobacco Storage">Tobacco Storage</option>
+              <option value="Coffee Roaster">Coffee Roaster</option>
+            </optgroup>
+
+            <optgroup label="Violet buildings">
+              <option value="Small Market">Small Market</option>
+              <option value="Hacienda">Hacienda</option>
+              <option value="Construction Hut">Construction Hut</option>
+              <option value="Small Warehouse">Small Warehouse</option>
+              <option value="Hospice">Hospice</option>
+              <option value="Office">Office</option>
+              <option value="Large Market">Large Market</option>
+              <option value="Large Warehouse">Large Warehouse</option>
+              <option value="University">University</option>
+              <option value="Factory">Factory</option>
+              <option value="Harbor">Harbor</option>
+              <option value="Wharf">Wharf</option>
+            </optgroup>
+
+            <optgroup label="Large buildings">
+              <option value="Guild Hall">Guild Hall</option>
+              <option value="Residence">Residence</option>
+              <option value="Fortress">Fortress</option>
+              <option value="Customs House">Customs House</option>
+              <option value="City Hall">City Hall</option>
+            </optgroup>
+
             <option value="Other">Other / unknown</option>
           </select>
         </div>
