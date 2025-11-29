@@ -43,7 +43,7 @@ function plantationSynergyBonus(plantation, playerBoard) {
   const uniqueTypes = new Set(all);
 
   if (!uniqueTypes.has(plantation)) {
-    // Early diversification is quite nice, especially if you're Indigo starter.
+    // Early diversification is nice, especially for Indigo starter.
     bonus += 0.5;
   }
 
@@ -317,6 +317,7 @@ document.addEventListener("DOMContentLoaded", () => {
   const resultsSection = document.getElementById("results");
   const list = document.getElementById("recommendation-list");
   const turnSelect = document.getElementById("turn-number");
+  const oppLastRoleSelect = document.getElementById("opp-last-role");
 
   function syncDoubloonsToGovernor() {
     if (governorSelect.value === "you") {
@@ -366,13 +367,22 @@ document.addEventListener("DOMContentLoaded", () => {
     // If already at your last pick, we silently stay there.
   }
 
+  function removePlantationFromRow(plantation) {
+    if (!plantation) return;
+    const selects = Array.from(document.querySelectorAll(".plantation"));
+    const match = selects.find(sel => sel.value === plantation);
+    if (match) {
+      match.value = "None";
+    }
+  }
+
   function applyChosenMove(role, plantation) {
     // Update session state based on chosen move
     if (role === "Settler" && plantation) {
       // Record that you picked this plantation
       sessionState.extraPlantations.push(plantation);
-      // In this simplified version we don't alter the visible plantation row,
-      // since Settler can't be chosen again this round anyway.
+      // Remove that tile from the face-up row so it doesn't get recommended again
+      removePlantationFromRow(plantation);
     }
 
     // Remove chosen role from available roles (uncheck it)
@@ -391,6 +401,23 @@ document.addEventListener("DOMContentLoaded", () => {
     resultsSection.classList.add("hidden");
   }
 
+  function applyOpponentLastRole() {
+    const role = oppLastRoleSelect.value;
+    if (!role) return;
+
+    // Uncheck that role in the available roles (it has been used by opponent)
+    const roleCheckbox = document.querySelector(`.role[value="${role}"]`);
+    if (roleCheckbox) {
+      roleCheckbox.checked = false;
+    }
+
+    // Clear previous recommendations since the game state just changed
+    if (!resultsSection.classList.contains("hidden")) {
+      list.innerHTML = "";
+      resultsSection.classList.add("hidden");
+    }
+  }
+
   // When you click "Recommend"
   button.addEventListener("click", () => {
     const state = readStateFromUI();
@@ -407,11 +434,14 @@ document.addEventListener("DOMContentLoaded", () => {
     applyChosenMove(role, plantation);
   });
 
-  // When you change who is Governor, update the defaults
+  // When you change who is Governor, update the defaults & picks
   governorSelect.addEventListener("change", () => {
     syncDoubloonsToGovernor();
     populatePickNumbers();
   });
+
+  // When opponent's last pick changes, update available roles
+  oppLastRoleSelect.addEventListener("change", applyOpponentLastRole);
 
   // Initialize once on load
   syncDoubloonsToGovernor();
