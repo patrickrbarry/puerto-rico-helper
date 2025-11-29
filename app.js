@@ -1,7 +1,13 @@
 // --- Simple in-memory session state (persists while page is open) ---
 const sessionState = {
-  extraPlantations: [], // your plantations beyond starting
-  buildings: []         // names of buildings you own
+  extraPlantations: [],       // your plantations beyond starting
+  quarries: 0,                // your quarries
+  buildings: [],              // your buildings
+  opponent: {
+    extraPlantations: [],     // opponent plantations beyond starting
+    quarries: 0,
+    buildings: []
+  }
 };
 
 // --- Building definitions (early-game focus) ---
@@ -38,10 +44,6 @@ const BUILDINGS = [
 
 // --- Scoring constants & helpers ---
 
-// Base values reflect that:
-// - Corn is still the best raw economy starter
-// - Sugar / other higher-value goods are strong once buildings are in place
-// - Indigo is weaker unless paired with its production building
 const PLANTATION_VALUES_BASE = {
   Corn: 3.1,
   Sugar: 2.8,
@@ -53,16 +55,12 @@ const PLANTATION_VALUES_BASE = {
 function plantationSynergyBonus(plantation, playerBoard) {
   let bonus = 0;
 
-  // Synergy for matching starting crop depends on which crop it is.
   if (plantation === playerBoard.startingPlantation) {
     if (plantation === "Corn") {
-      // Corn dupe is very strong in 2p shipping pressure.
       bonus += 0.9;
     } else if (plantation === "Indigo") {
-      // Matching indigo is only a mild boost – often prefer better goods or Builder.
       bonus += 0.2;
     } else {
-      // Other crops: moderate synergy
       bonus += 0.6;
     }
   }
@@ -71,7 +69,6 @@ function plantationSynergyBonus(plantation, playerBoard) {
   const uniqueTypes = new Set(all);
 
   if (!uniqueTypes.has(plantation)) {
-    // Early diversification is nice, especially for Indigo starter.
     bonus += 0.5;
   }
 
@@ -81,18 +78,30 @@ function plantationSynergyBonus(plantation, playerBoard) {
 function plantationDenyBonus(plantation, opponentBoard) {
   let bonus = 0;
   if (plantation === opponentBoard.startingPlantation) {
-    // Denying more corn to a Corn starter, or more indigo to Indigo starter, has some value.
     bonus += 0.4;
   }
   return bonus;
 }
 
+function scoreQuarryChoice(you, context) {
+  // Quarries are strong early; diminishing returns with more of them.
+  let score = 2.7;
+  if (context.turnNumber <= 3) score += 0.5;
+  const q = you.quarries || 0;
+  if (q === 0) score += 0.8;
+  else if (q === 1) score += 0.3;
+  else score -= 0.3 * (q - 1);
+  return score;
+}
+
 function scorePlantationChoice(plantation, you, opponent, context) {
+  if (plantation === "Quarry") {
+    return scoreQuarryChoice(you, context);
+  }
+
   const base = PLANTATION_VALUES_BASE[plantation] || 0;
   const synergy = plantationSynergyBonus(plantation, you);
   const deny = plantationDenyBonus(plantation, opponent);
-
-  // Earlier picks in the round have slightly more shaping power.
   const earlyTurnBonus = context.turnNumber <= 2 ? 0.4 : 0;
 
   return base + synergy + deny + earlyTurnBonus;
@@ -101,7 +110,15 @@ function scorePlantationChoice(plantation, you, opponent, context) {
 function describePlantationReason(plantation, you, opponent) {
   const parts = [];
 
-  if (plantation === "Corn") {
+  if (plantation === "Quarry") {
+    parts.push("Quarries reduce building costs, which is extremely valuable in 2-player where building tempo is critical.");
+    const q = you.quarries || 0;
+    if (q === 0) {
+      parts.push("This is your first quarry, giving you a big long-term discount on buildings.");
+    } else {
+      parts.push("More quarries further reduce your effective building costs, though with diminishing returns.");
+    }
+  } else if (plantation === "Corn") {
     parts.push("Corn is extremely strong early because it produces without a building and gives fast shipping pressure in 2-player.");
   } else if (plantation === "Indigo") {
     parts.push("Indigo is weaker economically than corn; it mainly shines once you have the matching indigo production building.");
@@ -111,14 +128,16 @@ function describePlantationReason(plantation, you, opponent) {
     parts.push(`${plantation} is a high-value export that pays off once the right production building is online.`);
   }
 
-  if (plantation === you.startingPlantation) {
-    parts.push("It matches your starting plantation, reinforcing that production line.");
-  } else {
-    parts.push("It diversifies your plantations, giving you more flexibility later.");
-  }
+  if (plantation !== "Quarry") {
+    if (plantation === you.startingPlantation) {
+      parts.push("It matches your starting plantation, reinforcing that production line.");
+    } else {
+      parts.push("It diversifies your plantations, giving you more flexibility later.");
+    }
 
-  if (plantation === opponent.startingPlantation) {
-    parts.push("It also denies the opponent another copy of their main crop.");
+    if (plantation === opponent.startingPlantation) {
+      parts.push("It also denies the opponent another copy of their main crop.");
+    }
   }
 
   return parts.join(" ");
@@ -137,26 +156,21 @@ function countPlantationType(playerBoard, type) {
 }
 
 function scoreBuildingChoice(building, you, context) {
-  // Don't recommend duplicates of small buildings (1 copy in 2p)
   if (hasBuilding(you.buildings, building.name)) {
-    return -999; // effectively "do not recommend"
+    return -999;
   }
 
   let score = building.baseValue;
 
-  // Production synergy
   if (building.type === "production" && building.crop) {
     const n = countPlantationType(you, building.crop);
     if (n > 0) {
-      // You already have plantations of this crop: big synergy.
       score += 1.5 + 0.3 * (n - 1);
     } else if (building.crop === you.startingPlantation) {
-      // No extra plantations yet but matches starting crop.
       score += 1.0;
     }
   }
 
-  // Small Market: better if you have multiple production lines.
   if (building.name === "Small Market") {
     const uniquePlantTypes = new Set([
       you.startingPlantation,
@@ -165,26 +179,27 @@ function scoreBuildingChoice(building, you, context) {
     if (uniquePlantTypes.size >= 2) score += 0.7;
   }
 
-  // Hacienda: better early when you will still take more Settlers.
   if (building.name === "Hacienda") {
     if (context.turnNumber <= 3) score += 0.8;
   }
 
-  // Slight penalty for spending more early money (opportunity cost)
+  // Quarries effectively cheapen buildings; approximate this:
+  const quarryDiscount = (you.quarries || 0) * 0.3;
+  score += quarryDiscount;
+
   score -= building.cost * 0.2;
 
   return score;
 }
 
 function getBuilderOptions(you, context) {
-  // Only consider buildings you can afford for now.
   return BUILDINGS
     .filter(b => b.cost <= you.doubloons)
     .map(building => {
       const score = scoreBuildingChoice(building, you, context);
       return { building, score };
     })
-    .filter(opt => opt.score > -500) // filter out "do not recommend"
+    .filter(opt => opt.score > -500)
     .sort((a, b) => b.score - a.score);
 }
 
@@ -193,7 +208,7 @@ function getBuilderOptions(you, context) {
 function scoreProspector(you, context) {
   let score = 2.0;
   if (you.doubloons <= 2) score += 0.7;
-  if (context.turnNumber <= 2) score -= 0.2; // early you often want strong plantation or Builder first
+  if (context.turnNumber <= 2) score -= 0.2;
   return score;
 }
 
@@ -211,10 +226,9 @@ function explainProspector(you, context) {
 
 function scoreBuilderRole(you, context) {
   const options = getBuilderOptions(you, context);
-  if (options.length === 0) return 0.5; // not great if you can't buy anything meaningful
-  // Use best building option as proxy
+  if (options.length === 0) return 0.5;
   const best = options[0].score;
-  return best + 0.2; // small bump for the flexibility of choosing buildings
+  return best + 0.2;
 }
 
 function explainBuilderRole(you, context) {
@@ -237,17 +251,12 @@ function scoreOtherRole(role, you, context) {
 
   switch (role) {
     case "Mayor":
-      // Better once you actually have stuff to staff
       return hasAnyBuilding || plantCount > 1 ? 1.2 : 0.6;
     case "Craftsman":
-      // Better if you have at least one production pair (rough heuristic)
       return hasAnyBuilding ? 1.0 : 0.4;
     case "Trader":
-      // Better once you can produce higher-value goods, but we don't
-      // model goods yet, so keep modest.
       return 0.7;
     case "Captain":
-      // Rarely great this early, but slightly better with multiple crops.
       return plantCount >= 2 ? 0.6 : 0.2;
     default:
       return 0.3;
@@ -289,7 +298,7 @@ function recommendMoves(state) {
 
   const recommendations = [];
 
-  // Settler choices
+  // Settler choices: plantations + quarry if available
   if (roundState.availableRoles.includes("Settler")) {
     for (const plantation of roundState.faceUpPlantations) {
       if (plantation === "None") continue;
@@ -297,6 +306,13 @@ function recommendMoves(state) {
       const title = `Take Settler → choose ${plantation}`;
       const explanation = describePlantationReason(plantation, you, opponent);
       recommendations.push({ score, title, explanation, role: "Settler", plantation });
+    }
+
+    if (roundState.quarriesRemaining > 0) {
+      const score = scorePlantationChoice("Quarry", you, opponent, context);
+      const title = "Take Settler → choose Quarry";
+      const explanation = describePlantationReason("Quarry", you, opponent);
+      recommendations.push({ score, title, explanation, role: "Settler", plantation: "Quarry" });
     }
   }
 
@@ -341,9 +357,7 @@ function recommendMoves(state) {
     recommendations.push({ score, title, explanation, role });
   }
 
-  // Sort best to worst
   recommendations.sort((a, b) => b.score - a.score);
-
   return recommendations;
 }
 
@@ -358,27 +372,30 @@ function readStateFromUI() {
   const plantationSelects = Array.from(document.querySelectorAll(".plantation"));
   const faceUpPlantations = plantationSelects.map(sel => sel.value);
 
+  const quarriesRemaining = Number(document.getElementById("quarries-remaining").value || 0);
+
   const availableRoles = Array.from(document.querySelectorAll(".role"))
     .filter(cb => cb.checked)
     .map(cb => cb.value);
 
   const oppLastRole = document.getElementById("opp-last-role").value || null;
 
-  // Starting plantations depend on who is Governor
   const youStart = governorSelect === "you" ? "Indigo" : "Corn";
   const oppStart = governorSelect === "you" ? "Corn" : "Indigo";
 
   const you = {
     startingPlantation: youStart,
     extraPlantations: sessionState.extraPlantations,
+    quarries: sessionState.quarries,
     buildings: sessionState.buildings,
     doubloons: yourDoubloons
   };
 
   const opponent = {
     startingPlantation: oppStart,
-    extraPlantations: [],
-    buildings: [],
+    extraPlantations: sessionState.opponent.extraPlantations,
+    quarries: sessionState.opponent.quarries,
+    buildings: sessionState.opponent.buildings,
     doubloons: oppDoubloons,
     lastRole: oppLastRole
   };
@@ -386,7 +403,8 @@ function readStateFromUI() {
   const roundState = {
     availableRoles,
     takenRoles: oppLastRole ? [{ by: "opp", role: oppLastRole }] : [],
-    faceUpPlantations
+    faceUpPlantations,
+    quarriesRemaining
   };
 
   return {
@@ -399,19 +417,36 @@ function readStateFromUI() {
 
 function updateStateDisplays() {
   const governorSelect = document.getElementById("governor-select").value;
-  const plantationsDisplay = document.getElementById("your-plantations-display");
-  const buildingsDisplay = document.getElementById("your-buildings-display");
+  const yourPlantationsDisplay = document.getElementById("your-plantations-display");
+  const yourBuildingsDisplay = document.getElementById("your-buildings-display");
+  const oppPlantationsDisplay = document.getElementById("opp-plantations-display");
+  const oppBuildingsDisplay = document.getElementById("opp-buildings-display");
 
-  const starting = governorSelect === "you" ? "Indigo" : "Corn";
+  const yourStart = governorSelect === "you" ? "Indigo" : "Corn";
+  const oppStart = governorSelect === "you" ? "Corn" : "Indigo";
 
-  const extras = sessionState.extraPlantations;
-  const extraText = extras.length ? extras.join(", ") : "none yet";
+  const yExtras = sessionState.extraPlantations;
+  const yExtraText = yExtras.length ? yExtras.join(", ") : "none yet";
+  const yQuarries = sessionState.quarries || 0;
 
-  plantationsDisplay.textContent = `Starting crop: ${starting}. Extra plantations: ${extraText}.`;
+  yourPlantationsDisplay.textContent =
+    `Starting crop: ${yourStart}. Extra plantations: ${yExtraText}. Quarries: ${yQuarries}.`;
 
-  const buildings = sessionState.buildings;
-  buildingsDisplay.textContent = buildings.length
-    ? `Buildings: ${buildings.join(", ")}.`
+  const yBuildings = sessionState.buildings;
+  yourBuildingsDisplay.textContent = yBuildings.length
+    ? `Buildings: ${yBuildings.join(", ")}.`
+    : "Buildings: none yet.";
+
+  const oExtras = sessionState.opponent.extraPlantations;
+  const oExtraText = oExtras.length ? oExtras.join(", ") : "none yet";
+  const oQuarries = sessionState.opponent.quarries || 0;
+
+  oppPlantationsDisplay.textContent =
+    `Starting crop: ${oppStart}. Extra plantations: ${oExtraText}. Quarries: ${oQuarries}.`;
+
+  const oBuildings = sessionState.opponent.buildings;
+  oppBuildingsDisplay.textContent = oBuildings.length
+    ? `Buildings: ${oBuildings.join(", ")}.`
     : "Buildings: none yet.";
 }
 
@@ -422,8 +457,6 @@ function renderRecommendations(recs) {
 
   recs.slice(0, 5).forEach(rec => {
     const li = document.createElement("li");
-
-    // Store role + plantation + building info as data attributes so clicking can apply state
     li.dataset.role = rec.role || "";
     li.dataset.plantation = rec.plantation || "";
     li.dataset.building = rec.building || "";
@@ -455,24 +488,28 @@ document.addEventListener("DOMContentLoaded", () => {
   const list = document.getElementById("recommendation-list");
   const turnSelect = document.getElementById("turn-number");
   const oppLastRoleSelect = document.getElementById("opp-last-role");
+  const oppSettlerGainSelect = document.getElementById("opp-settler-gain");
+  const oppBuilderBuildingSelect = document.getElementById("opp-builder-building");
+  const quarriesRemainingInput = document.getElementById("quarries-remaining");
+  const applyOppBtn = document.getElementById("apply-opp-btn");
 
   function syncDoubloonsToGovernor() {
     if (governorSelect.value === "you") {
-      // You are Governor: Indigo + 3, Opponent: Corn + 2
       yourDoubloonsInput.value = "3";
       oppDoubloonsInput.value = "2";
     } else {
-      // Opponent is Governor: they get Indigo + 3, you Corn + 2
       yourDoubloonsInput.value = "2";
       oppDoubloonsInput.value = "3";
     }
 
-    // Reset extra plantations & buildings if you flip Governor mid-game
     sessionState.extraPlantations = [];
+    sessionState.quarries = 0;
     sessionState.buildings = [];
+    sessionState.opponent.extraPlantations = [];
+    sessionState.opponent.quarries = 0;
+    sessionState.opponent.buildings = [];
     updateStateDisplays();
 
-    // Clear previous recommendations when you flip roles
     if (!resultsSection.classList.contains("hidden")) {
       list.innerHTML = "";
       resultsSection.classList.add("hidden");
@@ -483,10 +520,7 @@ document.addEventListener("DOMContentLoaded", () => {
     const isGovernor = governorSelect.value === "you";
     const yourPicks = isGovernor ? [1, 3, 5] : [2, 4, 6];
 
-    // Clear existing options
     turnSelect.innerHTML = "";
-
-    // Populate with your valid picks
     yourPicks.forEach(n => {
       const opt = document.createElement("option");
       opt.value = n;
@@ -503,11 +537,10 @@ document.addEventListener("DOMContentLoaded", () => {
     if (idx >= 0 && idx < picks.length - 1) {
       turnSelect.value = String(picks[idx + 1]);
     }
-    // If already at your last pick, we silently stay there.
   }
 
   function removePlantationFromRow(plantation) {
-    if (!plantation) return;
+    if (!plantation || plantation === "Quarry") return;
     const selects = Array.from(document.querySelectorAll(".plantation"));
     const match = selects.find(sel => sel.value === plantation);
     if (match) {
@@ -515,15 +548,26 @@ document.addEventListener("DOMContentLoaded", () => {
     }
   }
 
+  function decrementQuarriesRemaining() {
+    let q = Number(quarriesRemainingInput.value || 0);
+    if (q > 0) {
+      q -= 1;
+      quarriesRemainingInput.value = String(q);
+    }
+  }
+
   function applyChosenMove(role, plantation, buildingName) {
-    // Update session state based on chosen move
     if (role === "Settler" && plantation) {
-      sessionState.extraPlantations.push(plantation);
-      removePlantationFromRow(plantation);
+      if (plantation === "Quarry") {
+        sessionState.quarries += 1;
+        decrementQuarriesRemaining();
+      } else {
+        sessionState.extraPlantations.push(plantation);
+        removePlantationFromRow(plantation);
+      }
     }
 
     if (role === "Builder" && buildingName) {
-      // Add building and subtract cost
       const buildingDef = BUILDINGS.find(b => b.name === buildingName);
       if (buildingDef && !sessionState.buildings.includes(buildingName)) {
         sessionState.buildings.push(buildingName);
@@ -534,14 +578,12 @@ document.addEventListener("DOMContentLoaded", () => {
     }
 
     if (role === "Prospector") {
-      // Gain 1 doubloon
       const currentMoney = Number(yourDoubloonsInput.value || 0);
       yourDoubloonsInput.value = String(currentMoney + 1);
     }
 
     updateStateDisplays();
 
-    // Remove chosen role from available roles (uncheck it)
     if (role) {
       const roleCheckbox = document.querySelector(`.role[value="${role}"]`);
       if (roleCheckbox) {
@@ -549,10 +591,8 @@ document.addEventListener("DOMContentLoaded", () => {
       }
     }
 
-    // Advance to your next pick in the round (if any)
     advancePickNumber();
 
-    // Clear previous recommendations
     list.innerHTML = "";
     resultsSection.classList.add("hidden");
   }
@@ -561,27 +601,54 @@ document.addEventListener("DOMContentLoaded", () => {
     const role = oppLastRoleSelect.value;
     if (!role) return;
 
-    // Uncheck that role in the available roles (it has been used by opponent)
+    if (role === "Settler") {
+      const gain = oppSettlerGainSelect.value;
+      if (gain === "Quarry") {
+        sessionState.opponent.quarries += 1;
+        decrementQuarriesRemaining();
+      } else if (gain) {
+        sessionState.opponent.extraPlantations.push(gain);
+        removePlantationFromRow(gain);
+      }
+    }
+
+    if (role === "Builder") {
+      const buildingName = oppBuilderBuildingSelect.value;
+      if (buildingName && buildingName !== "Other") {
+        const buildingDef = BUILDINGS.find(b => b.name === buildingName);
+        if (buildingDef && !sessionState.opponent.buildings.includes(buildingName)) {
+          sessionState.opponent.buildings.push(buildingName);
+          const currentMoney = Number(oppDoubloonsInput.value || 0);
+          const newMoney = Math.max(0, currentMoney - buildingDef.cost);
+          oppDoubloonsInput.value = String(newMoney);
+        }
+      }
+    }
+
+    if (role === "Prospector") {
+      const currentMoney = Number(oppDoubloonsInput.value || 0);
+      oppDoubloonsInput.value = String(currentMoney + 1);
+    }
+
+    updateStateDisplays();
+
     const roleCheckbox = document.querySelector(`.role[value="${role}"]`);
     if (roleCheckbox) {
       roleCheckbox.checked = false;
     }
 
-    // Clear previous recommendations since the game state just changed
     if (!resultsSection.classList.contains("hidden")) {
       list.innerHTML = "";
       resultsSection.classList.add("hidden");
     }
   }
 
-  // When you click "Recommend"
   button.addEventListener("click", () => {
     const state = readStateFromUI();
     const recs = recommendMoves(state);
     renderRecommendations(recs);
   });
 
-  // Make recommendations clickable: tap to apply move + advance
   list.addEventListener("click", (event) => {
     const li = event.target.closest("li");
     if (!li) return;
@@ -591,16 +658,13 @@ document.addEventListener("DOMContentLoaded", () => {
     applyChosenMove(role, plantation, buildingName);
   });
 
-  // When you change who is Governor, update the defaults & picks
   governorSelect.addEventListener("change", () => {
     syncDoubloonsToGovernor();
     populatePickNumbers();
   });
 
-  // When opponent's last pick changes, update available roles
-  oppLastRoleSelect.addEventListener("change", applyOpponentLastRole);
+  applyOppBtn.addEventListener("click", applyOpponentLastRole);
 
-  // Initialize once on load
   syncDoubloonsToGovernor();
   populatePickNumbers();
   updateStateDisplays();
