@@ -1,6 +1,6 @@
 <!DOCTYPE html>
 <html lang="en">
-<head>
+head>
   <meta charset="UTF-8" />
   <title>Puerto Rico Opening Helper</title>
   <meta name="viewport" content="width=device-width, initial-scale=1" />
@@ -56,8 +56,18 @@
 
     <section class="card">
       <h2>Your current engine</h2>
-      <p id="your-plantations-display" class="hint">Starting crop: (set by Governor). Extra plantations: none yet.</p>
+      <p id="your-plantations-display" class="hint">
+        Starting crop: (set by Governor). Extra plantations: none yet. Quarries: 0.
+      </p>
       <p id="your-buildings-display" class="hint">Buildings: none yet.</p>
+    </section>
+
+    <section class="card">
+      <h2>Opponent's current engine</h2>
+      <p id="opp-plantations-display" class="hint">
+        Starting crop: (set by Governor). Extra plantations: none yet. Quarries: 0.
+      </p>
+      <p id="opp-buildings-display" class="hint">Buildings: none yet.</p>
     </section>
 
     <section class="card">
@@ -100,6 +110,14 @@
           <option value="Coffee">Coffee</option>
         </select>
       </div>
+
+      <div class="field-row">
+        <label for="quarries-remaining">Quarries remaining</label>
+        <input id="quarries-remaining" type="number" min="0" max="5" value="5" />
+      </div>
+      <p class="hint">
+        Settler may always choose a quarry (while any remain), which is often important early.
+      </p>
     </section>
 
     <section class="card">
@@ -107,7 +125,7 @@
       <p class="hint">
         Check the roles that are still available when it’s your turn to pick.
         (2-player: 7 total roles, 6 are chosen, 1 is left over with a coin.)
-        When you tap a recommendation or set the opponent’s last pick, the
+        When you tap a recommendation or apply the opponent’s last pick, the
         corresponding role will be removed here.
       </p>
       <div class="roles">
@@ -123,6 +141,7 @@
 
     <section class="card">
       <h2>Opponent’s Last Pick</h2>
+
       <div class="field-row">
         <label for="opp-last-role">Role they just chose</label>
         <select id="opp-last-role">
@@ -136,10 +155,38 @@
           <option value="Prospector">Prospector</option>
         </select>
       </div>
+
+      <div class="field-row">
+        <label for="opp-settler-gain">If Settler: what did they take?</label>
+        <select id="opp-settler-gain">
+          <option value="">(n/a or unknown)</option>
+          <option value="Corn">Corn plantation</option>
+          <option value="Indigo">Indigo plantation</option>
+          <option value="Sugar">Sugar plantation</option>
+          <option value="Tobacco">Tobacco plantation</option>
+          <option value="Coffee">Coffee plantation</option>
+          <option value="Quarry">Quarry</option>
+        </select>
+      </div>
+
+      <div class="field-row">
+        <label for="opp-builder-building">If Builder: what did they build?</label>
+        <select id="opp-builder-building">
+          <option value="">(n/a or unknown)</option>
+          <option value="Small Indigo Plant">Small Indigo Plant</option>
+          <option value="Sugar Mill">Sugar Mill</option>
+          <option value="Small Market">Small Market</option>
+          <option value="Hacienda">Hacienda</option>
+          <option value="Other">Other / unknown</option>
+        </select>
+      </div>
+
       <p class="hint">
-        When you select a role here, it will be removed from the available roles and
-        considered used for future recommendations.
+        Set the role and, if relevant, what they did with it. Then click “Apply opponent move”
+        to update their engine, remove the role from availability, and update the board.
       </p>
+
+      <button id="apply-opp-btn">Apply opponent move</button>
     </section>
 
     <button id="recommend-btn">Recommend my move</button>
