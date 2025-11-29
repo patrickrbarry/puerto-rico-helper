@@ -1,7 +1,40 @@
 // --- Simple in-memory session state (persists while page is open) ---
 const sessionState = {
-  extraPlantations: [] // your plantations beyond starting
+  extraPlantations: [], // your plantations beyond starting
+  buildings: []         // names of buildings you own
 };
+
+// --- Building definitions (early-game focus) ---
+const BUILDINGS = [
+  {
+    name: "Small Indigo Plant",
+    type: "production",
+    crop: "Indigo",
+    cost: 1,
+    baseValue: 3.0
+  },
+  {
+    name: "Sugar Mill",
+    type: "production",
+    crop: "Sugar",
+    cost: 2,
+    baseValue: 3.2
+  },
+  {
+    name: "Small Market",
+    type: "violet",
+    crop: null,
+    cost: 1,
+    baseValue: 2.5
+  },
+  {
+    name: "Hacienda",
+    type: "violet",
+    crop: null,
+    cost: 2,
+    baseValue: 2.8
+  }
+];
 
 // --- Scoring constants & helpers ---
 
@@ -16,11 +49,6 @@ const PLANTATION_VALUES_BASE = {
   Tobacco: 2.4,
   Coffee: 2.3
 };
-
-// Placeholder for future: we don't yet track buildings
-function hasProductionForStartingCrop(playerBoard) {
-  return false;
-}
 
 function plantationSynergyBonus(plantation, playerBoard) {
   let bonus = 0;
@@ -96,7 +124,71 @@ function describePlantationReason(plantation, you, opponent) {
   return parts.join(" ");
 }
 
-// --- Non-Settler roles (early 2-player heuristics) ---
+// --- Builder logic: score specific buildings ---
+
+function hasBuilding(buildings, name) {
+  return buildings.includes(name);
+}
+
+function countPlantationType(playerBoard, type) {
+  return [playerBoard.startingPlantation, ...playerBoard.extraPlantations].filter(
+    p => p === type
+  ).length;
+}
+
+function scoreBuildingChoice(building, you, context) {
+  // Don't recommend duplicates of small buildings (1 copy in 2p)
+  if (hasBuilding(you.buildings, building.name)) {
+    return -999; // effectively "do not recommend"
+  }
+
+  let score = building.baseValue;
+
+  // Production synergy
+  if (building.type === "production" && building.crop) {
+    const n = countPlantationType(you, building.crop);
+    if (n > 0) {
+      // You already have plantations of this crop: big synergy.
+      score += 1.5 + 0.3 * (n - 1);
+    } else if (building.crop === you.startingPlantation) {
+      // No extra plantations yet but matches starting crop.
+      score += 1.0;
+    }
+  }
+
+  // Small Market: better if you have multiple production lines.
+  if (building.name === "Small Market") {
+    const uniquePlantTypes = new Set([
+      you.startingPlantation,
+      ...you.extraPlantations
+    ]);
+    if (uniquePlantTypes.size >= 2) score += 0.7;
+  }
+
+  // Hacienda: better early when you will still take more Settlers.
+  if (building.name === "Hacienda") {
+    if (context.turnNumber <= 3) score += 0.8;
+  }
+
+  // Slight penalty for spending more early money (opportunity cost)
+  score -= building.cost * 0.2;
+
+  return score;
+}
+
+function getBuilderOptions(you, context) {
+  // Only consider buildings you can afford for now.
+  return BUILDINGS
+    .filter(b => b.cost <= you.doubloons)
+    .map(building => {
+      const score = scoreBuildingChoice(building, you, context);
+      return { building, score };
+    })
+    .filter(opt => opt.score > -500) // filter out "do not recommend"
+    .sort((a, b) => b.score - a.score);
+}
+
+// --- Non-Settler role heuristics ---
 
 function scoreProspector(you, context) {
   let score = 2.0;
@@ -117,30 +209,21 @@ function explainProspector(you, context) {
   return bits.join(" ");
 }
 
-function scoreBuilder(you, context) {
-  // Core idea:
-  // If you can get the matching small production building for your starting crop early,
-  // that's often better than just another indigo tile.
-  let score = 1.5;
-
-  // If you have 3+ doubloons early, strongly prefer Builder –
-  // treat this as "you can probably buy your key small production building".
-  if (you.doubloons >= 3 && context.turnNumber <= 3) {
-    score += 2.0;
-  } else if (you.doubloons >= 3) {
-    score += 1.2;
-  }
-
-  return score;
+function scoreBuilderRole(you, context) {
+  const options = getBuilderOptions(you, context);
+  if (options.length === 0) return 0.5; // not great if you can't buy anything meaningful
+  // Use best building option as proxy
+  const best = options[0].score;
+  return best + 0.2; // small bump for the flexibility of choosing buildings
 }
 
-function explainBuilder(you, context) {
+function explainBuilderRole(you, context) {
   const bits = [];
-  bits.push("Builder can be very strong early if you can buy a small production building that matches your starting crop (e.g., Small Indigo Plant or Sugar Mill).");
+  bits.push("Builder lets you convert your doubloons into long-term engine pieces.");
   if (you.doubloons >= 3) {
-    bits.push("With 3+ doubloons, you have the buying power to actually grab one of those key buildings right now.");
+    bits.push("With 3+ doubloons, you can often buy a key early building like a production plant or Hacienda.");
   } else {
-    bits.push("Your current money is limited, so your building options may be constrained.");
+    bits.push("With limited money, your options are narrower, but cheap buildings like Small Indigo Plant or Small Market may still be attractive.");
   }
   if (context.turnNumber <= 3) {
     bits.push("Doing this early sets up production and shipping before your opponent fully spins up.");
@@ -148,31 +231,50 @@ function explainBuilder(you, context) {
   return bits.join(" ");
 }
 
-function scoreOtherRole(role, context) {
-  // Round-1 2-player: non-Settler, non-Builder roles are usually lower priority.
+function scoreOtherRole(role, you, context) {
+  const plantCount = [you.startingPlantation, ...you.extraPlantations].length;
+  const hasAnyBuilding = you.buildings.length > 0;
+
   switch (role) {
     case "Mayor":
-      return 0.6;
+      // Better once you actually have stuff to staff
+      return hasAnyBuilding || plantCount > 1 ? 1.2 : 0.6;
     case "Craftsman":
-      return 0.4;
+      // Better if you have at least one production pair (rough heuristic)
+      return hasAnyBuilding ? 1.0 : 0.4;
     case "Trader":
-      return 0.3;
+      // Better once you can produce higher-value goods, but we don't
+      // model goods yet, so keep modest.
+      return 0.7;
     case "Captain":
-      return 0.2;
+      // Rarely great this early, but slightly better with multiple crops.
+      return plantCount >= 2 ? 0.6 : 0.2;
     default:
-      return 0;
+      return 0.3;
   }
 }
 
-function explainOtherRole(role) {
+function explainOtherRole(role, you, context) {
+  const plantCount = [you.startingPlantation, ...you.extraPlantations].length;
+  const hasAnyBuilding = you.buildings.length > 0;
+
   switch (role) {
     case "Mayor":
+      if (hasAnyBuilding || plantCount > 1) {
+        return "Mayor can be reasonable now because you have enough plantations/buildings to justify extra colonists, but it's still usually secondary to Settler/Builder openings.";
+      }
       return "Mayor can help place colonists, but very early you usually have few buildings or plantations to staff, so it’s rarely the best opening pick.";
     case "Craftsman":
+      if (hasAnyBuilding) {
+        return "Craftsman becomes more attractive once you have production buildings, but in very early turns it often lags behind strong Settler or Builder plays.";
+      }
       return "Craftsman is rarely strong in the very first round before a larger production engine is online.";
     case "Trader":
-      return "Trader tends to be low-impact in the opening when there are few goods to sell.";
+      return "Trader tends to be low-impact in the opening when there are few goods to sell, but can set up a small cash injection when production ramps up.";
     case "Captain":
+      if (plantCount >= 2) {
+        return "Captain can sometimes be used tactically to ship and deny your opponent, but it’s usually not a top priority in the early game.";
+      }
       return "Captain is almost never ideal this early; shipments are limited and you usually don’t want to prematurely clear goods.";
     default:
       return "This role is usually lower priority in the opening compared to Settler, Builder, and sometimes Prospector.";
@@ -206,20 +308,36 @@ function recommendMoves(state) {
     recommendations.push({ score, title, explanation, role: "Prospector" });
   }
 
-  // Builder
+  // Builder – with specific building options
   if (roundState.availableRoles.includes("Builder")) {
-    const score = scoreBuilder(you, context);
-    const title = "Take Builder";
-    const explanation = explainBuilder(you, context);
-    recommendations.push({ score, title, explanation, role: "Builder" });
+    const builderOptions = getBuilderOptions(you, context);
+    if (builderOptions.length === 0) {
+      const score = 0.4;
+      const title = "Take Builder (limited options)";
+      const explanation = "You don't currently have strong building options you can afford, so Builder is relatively weak compared to other roles.";
+      recommendations.push({ score, title, explanation, role: "Builder" });
+    } else {
+      builderOptions.forEach(opt => {
+        const { building, score } = opt;
+        const title = `Take Builder → buy ${building.name}`;
+        const explanation = explainBuilderRole(you, context);
+        recommendations.push({
+          score,
+          title,
+          explanation,
+          role: "Builder",
+          building: building.name
+        });
+      });
+    }
   }
 
   // Other roles
   for (const role of roundState.availableRoles) {
     if (["Settler", "Prospector", "Builder"].includes(role)) continue;
-    const score = scoreOtherRole(role, context);
+    const score = scoreOtherRole(role, you, context);
     const title = `Take ${role}`;
-    const explanation = explainOtherRole(role);
+    const explanation = explainOtherRole(role, you, context);
     recommendations.push({ score, title, explanation, role });
   }
 
@@ -253,7 +371,7 @@ function readStateFromUI() {
   const you = {
     startingPlantation: youStart,
     extraPlantations: sessionState.extraPlantations,
-    buildings: [],
+    buildings: sessionState.buildings,
     doubloons: yourDoubloons
   };
 
@@ -279,6 +397,24 @@ function readStateFromUI() {
   };
 }
 
+function updateStateDisplays() {
+  const governorSelect = document.getElementById("governor-select").value;
+  const plantationsDisplay = document.getElementById("your-plantations-display");
+  const buildingsDisplay = document.getElementById("your-buildings-display");
+
+  const starting = governorSelect === "you" ? "Indigo" : "Corn";
+
+  const extras = sessionState.extraPlantations;
+  const extraText = extras.length ? extras.join(", ") : "none yet";
+
+  plantationsDisplay.textContent = `Starting crop: ${starting}. Extra plantations: ${extraText}.`;
+
+  const buildings = sessionState.buildings;
+  buildingsDisplay.textContent = buildings.length
+    ? `Buildings: ${buildings.join(", ")}.`
+    : "Buildings: none yet.";
+}
+
 function renderRecommendations(recs) {
   const resultsSection = document.getElementById("results");
   const list = document.getElementById("recommendation-list");
@@ -287,9 +423,10 @@ function renderRecommendations(recs) {
   recs.slice(0, 5).forEach(rec => {
     const li = document.createElement("li");
 
-    // Store role + plantation info as data attributes so clicking can apply state
+    // Store role + plantation + building info as data attributes so clicking can apply state
     li.dataset.role = rec.role || "";
     li.dataset.plantation = rec.plantation || "";
+    li.dataset.building = rec.building || "";
 
     const title = document.createElement("div");
     title.className = "recommendation-title";
@@ -330,8 +467,10 @@ document.addEventListener("DOMContentLoaded", () => {
       oppDoubloonsInput.value = "3";
     }
 
-    // Reset extra plantations for a new perspective if you flip Governor
+    // Reset extra plantations & buildings if you flip Governor mid-game
     sessionState.extraPlantations = [];
+    sessionState.buildings = [];
+    updateStateDisplays();
 
     // Clear previous recommendations when you flip roles
     if (!resultsSection.classList.contains("hidden")) {
@@ -376,14 +515,31 @@ document.addEventListener("DOMContentLoaded", () => {
     }
   }
 
-  function applyChosenMove(role, plantation) {
+  function applyChosenMove(role, plantation, buildingName) {
     // Update session state based on chosen move
     if (role === "Settler" && plantation) {
-      // Record that you picked this plantation
       sessionState.extraPlantations.push(plantation);
-      // Remove that tile from the face-up row so it doesn't get recommended again
       removePlantationFromRow(plantation);
     }
+
+    if (role === "Builder" && buildingName) {
+      // Add building and subtract cost
+      const buildingDef = BUILDINGS.find(b => b.name === buildingName);
+      if (buildingDef && !sessionState.buildings.includes(buildingName)) {
+        sessionState.buildings.push(buildingName);
+        const currentMoney = Number(yourDoubloonsInput.value || 0);
+        const newMoney = Math.max(0, currentMoney - buildingDef.cost);
+        yourDoubloonsInput.value = String(newMoney);
+      }
+    }
+
+    if (role === "Prospector") {
+      // Gain 1 doubloon
+      const currentMoney = Number(yourDoubloonsInput.value || 0);
+      yourDoubloonsInput.value = String(currentMoney + 1);
+    }
+
+    updateStateDisplays();
 
     // Remove chosen role from available roles (uncheck it)
     if (role) {
@@ -431,7 +587,8 @@ document.addEventListener("DOMContentLoaded", () => {
     if (!li) return;
     const role = li.dataset.role || "";
     const plantation = li.dataset.plantation || "";
-    applyChosenMove(role, plantation);
+    const buildingName = li.dataset.building || "";
+    applyChosenMove(role, plantation, buildingName);
   });
 
   // When you change who is Governor, update the defaults & picks
@@ -446,4 +603,5 @@ document.addEventListener("DOMContentLoaded", () => {
   // Initialize once on load
   syncDoubloonsToGovernor();
   populatePickNumbers();
+  updateStateDisplays();
 });
