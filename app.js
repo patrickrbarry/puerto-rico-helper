@@ -7,7 +7,9 @@ const sessionState = {
     extraPlantations: [],     // opponent plantations beyond starting
     quarries: 0,
     buildings: []
-  }
+  },
+  // simple per-session preference tracker
+  feedbackCounts: {}          // key -> count
 };
 
 // --- Building definitions (early-game focus) ---
@@ -41,6 +43,25 @@ const BUILDINGS = [
     baseValue: 2.8
   }
 ];
+
+// --- Move preference helpers ---
+
+function moveKey(role, plantation, building) {
+  return `${role || ""}|${plantation || ""}|${building || ""}`;
+}
+
+function recordFeedback(role, plantation, building) {
+  const key = moveKey(role, plantation, building);
+  if (!key) return;
+  sessionState.feedbackCounts[key] = (sessionState.feedbackCounts[key] || 0) + 1;
+}
+
+function feedbackBonus(role, plantation, building) {
+  const key = moveKey(role, plantation, building);
+  const count = sessionState.feedbackCounts[key] || 0;
+  // Each time you choose a specific move manually, it gets a bit more weight.
+  return 0.3 * count;
+}
 
 // --- Scoring constants & helpers ---
 
@@ -84,7 +105,6 @@ function plantationDenyBonus(plantation, opponentBoard) {
 }
 
 function scoreQuarryChoice(you, context) {
-  // Quarries are strong early; diminishing returns with more of them.
   let score = 2.7;
   if (context.turnNumber <= 3) score += 0.5;
   const q = you.quarries || 0;
@@ -183,7 +203,6 @@ function scoreBuildingChoice(building, you, context) {
     if (context.turnNumber <= 3) score += 0.8;
   }
 
-  // Quarries effectively cheapen buildings; approximate this:
   const quarryDiscount = (you.quarries || 0) * 0.3;
   score += quarryDiscount;
 
@@ -298,18 +317,22 @@ function recommendMoves(state) {
 
   const recommendations = [];
 
-  // Settler choices: plantations + quarry if available
+  // Settler: plantations + quarry if available
   if (roundState.availableRoles.includes("Settler")) {
     for (const plantation of roundState.faceUpPlantations) {
       if (plantation === "None") continue;
-      const score = scorePlantationChoice(plantation, you, opponent, context);
+      let score = scorePlantationChoice(plantation, you, opponent, context);
+      score += feedbackBonus("Settler", plantation, null);
+
       const title = `Take Settler → choose ${plantation}`;
       const explanation = describePlantationReason(plantation, you, opponent);
       recommendations.push({ score, title, explanation, role: "Settler", plantation });
     }
 
     if (roundState.quarriesRemaining > 0) {
-      const score = scorePlantationChoice("Quarry", you, opponent, context);
+      let score = scorePlantationChoice("Quarry", you, opponent, context);
+      score += feedbackBonus("Settler", "Quarry", null);
+
       const title = "Take Settler → choose Quarry";
       const explanation = describePlantationReason("Quarry", you, opponent);
       recommendations.push({ score, title, explanation, role: "Settler", plantation: "Quarry" });
@@ -318,7 +341,9 @@ function recommendMoves(state) {
 
   // Prospector
   if (roundState.availableRoles.includes("Prospector")) {
-    const score = scoreProspector(you, context);
+    let score = scoreProspector(you, context);
+    score += feedbackBonus("Prospector", null, null);
+
     const title = "Take Prospector";
     const explanation = explainProspector(you, context);
     recommendations.push({ score, title, explanation, role: "Prospector" });
@@ -328,13 +353,18 @@ function recommendMoves(state) {
   if (roundState.availableRoles.includes("Builder")) {
     const builderOptions = getBuilderOptions(you, context);
     if (builderOptions.length === 0) {
-      const score = 0.4;
+      let score = 0.4;
+      score += feedbackBonus("Builder", null, null);
+
       const title = "Take Builder (limited options)";
       const explanation = "You don't currently have strong building options you can afford, so Builder is relatively weak compared to other roles.";
       recommendations.push({ score, title, explanation, role: "Builder" });
     } else {
       builderOptions.forEach(opt => {
-        const { building, score } = opt;
+        const { building } = opt;
+        let score = opt.score;
+        score += feedbackBonus("Builder", null, building.name);
+
         const title = `Take Builder → buy ${building.name}`;
         const explanation = explainBuilderRole(you, context);
         recommendations.push({
@@ -351,7 +381,9 @@ function recommendMoves(state) {
   // Other roles
   for (const role of roundState.availableRoles) {
     if (["Settler", "Prospector", "Builder"].includes(role)) continue;
-    const score = scoreOtherRole(role, you, context);
+    let score = scoreOtherRole(role, you, context);
+    score += feedbackBonus(role, null, null);
+
     const title = `Take ${role}`;
     const explanation = explainOtherRole(role, you, context);
     recommendations.push({ score, title, explanation, role });
@@ -455,7 +487,7 @@ function renderRecommendations(recs) {
   const list = document.getElementById("recommendation-list");
   list.innerHTML = "";
 
-  recs.slice(0, 5).forEach(rec => {
+  recs.slice(0, 3).forEach(rec => {
     const li = document.createElement("li");
     li.dataset.role = rec.role || "";
     li.dataset.plantation = rec.plantation || "";
@@ -493,6 +525,14 @@ document.addEventListener("DOMContentLoaded", () => {
   const quarriesRemainingInput = document.getElementById("quarries-remaining");
   const applyOppBtn = document.getElementById("apply-opp-btn");
 
+  const manualToggleBtn = document.getElementById("manual-choice-toggle");
+  const manualPanel = document.getElementById("manual-choice-panel");
+  const manualRoleSelect = document.getElementById("manual-role");
+  const manualPlantationSelect = document.getElementById("manual-plantation");
+  const manualBuildingSelect = document.getElementById("manual-building");
+  const manualReasonTextarea = document.getElementById("manual-reason");
+  const manualApplyBtn = document.getElementById("manual-apply-btn");
+
   function syncDoubloonsToGovernor() {
     if (governorSelect.value === "you") {
       yourDoubloonsInput.value = "3";
@@ -508,6 +548,7 @@ document.addEventListener("DOMContentLoaded", () => {
     sessionState.opponent.extraPlantations = [];
     sessionState.opponent.quarries = 0;
     sessionState.opponent.buildings = [];
+    sessionState.feedbackCounts = {};
     updateStateDisplays();
 
     if (!resultsSection.classList.contains("hidden")) {
@@ -567,7 +608,7 @@ document.addEventListener("DOMContentLoaded", () => {
       }
     }
 
-    if (role === "Builder" && buildingName) {
+    if (role === "Builder" && buildingName && buildingName !== "Other") {
       const buildingDef = BUILDINGS.find(b => b.name === buildingName);
       if (buildingDef && !sessionState.buildings.includes(buildingName)) {
         sessionState.buildings.push(buildingName);
@@ -664,6 +705,42 @@ document.addEventListener("DOMContentLoaded", () => {
   });
 
   applyOppBtn.addEventListener("click", applyOpponentLastRole);
+
+  manualToggleBtn.addEventListener("click", () => {
+    manualPanel.classList.toggle("hidden");
+  });
+
+  manualApplyBtn.addEventListener("click", () => {
+    const role = manualRoleSelect.value;
+    if (!role) {
+      return;
+    }
+
+    const plantation = manualPlantationSelect.value || "";
+    const buildingName = manualBuildingSelect.value || "";
+    const reason = manualReasonTextarea.value.trim();
+
+    // Record your preference for this move
+    recordFeedback(role, plantation || null, buildingName || null);
+
+    // (Optional) We could log this for debugging; for now it's just session-local
+    if (reason) {
+      console.log("Player explanation:", {
+        role,
+        plantation: plantation || null,
+        building: buildingName || null,
+        reason
+      });
+    }
+
+    applyChosenMove(role, plantation || null, buildingName || null);
+
+    // Light reset of manual form
+    manualPlantationSelect.value = "";
+    manualBuildingSelect.value = "";
+    manualReasonTextarea.value = "";
+    // keep role selected in case you make similar manual moves a lot
+  });
 
   syncDoubloonsToGovernor();
   populatePickNumbers();
