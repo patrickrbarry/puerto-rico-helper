@@ -300,9 +300,41 @@ function renderRecommendations(recs) {
 
 document.addEventListener("DOMContentLoaded", () => {
   const button = document.getElementById("recommend-btn");
+  const governorSelect = document.getElementById("governor-select");
+  const yourDoubloonsInput = document.getElementById("your-doubloons");
+  const oppDoubloonsInput = document.getElementById("opp-doubloons");
+  const resultsSection = document.getElementById("results");
+  const list = document.getElementById("recommendation-list");
+
+  function syncDoubloonsToGovernor() {
+    if (governorSelect.value === "you") {
+      // You are Governor: Indigo + 3, Opponent: Corn + 2
+      yourDoubloonsInput.value = "3";
+      oppDoubloonsInput.value = "2";
+    } else {
+      // Opponent is Governor: they get Indigo + 3, you Corn + 2
+      yourDoubloonsInput.value = "2";
+      oppDoubloonsInput.value = "3";
+    }
+
+    // Clear previous recommendations when you flip roles
+    if (!resultsSection.classList.contains("hidden")) {
+      list.innerHTML = "";
+      resultsSection.classList.add("hidden");
+    }
+  }
+
+  // When you click "Recommend"
   button.addEventListener("click", () => {
     const state = readStateFromUI();
     const recs = recommendMoves(state);
     renderRecommendations(recs);
   });
+
+  // When you change who is Governor, update the default money
+  governorSelect.addEventListener("change", syncDoubloonsToGovernor);
+
+  // Initialize once on load to match the default selector value
+  syncDoubloonsToGovernor();
 });
+
