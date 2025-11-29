@@ -1,26 +1,46 @@
 // --- Scoring constants & helpers ---
 
+// Base values reflect your comment: sugar / higher-value goods are strong;
+// indigo is weaker; corn still excellent as the pure economy starter.
 const PLANTATION_VALUES_BASE = {
-  Corn: 3.0,
-  Indigo: 2.6,
-  Sugar: 2.2,
-  Tobacco: 1.8,
-  Coffee: 1.7
+  Corn: 3.1,
+  Sugar: 2.8,
+  Indigo: 1.8,
+  Tobacco: 2.4,
+  Coffee: 2.3
 };
+
+function hasProductionForStartingCrop(playerBoard) {
+  // v0: we don't track buildings yet, so assume:
+  // if we take Builder and have enough money early, we can get
+  // the matching small production building. This function is
+  // here as a placeholder hook for when we actually track buildings.
+  return false;
+}
 
 function plantationSynergyBonus(plantation, playerBoard) {
   let bonus = 0;
 
+  // Synergy for matching your starting crop depends on WHICH crop.
   if (plantation === playerBoard.startingPlantation) {
-    // Matching your starting crop is usually strong in 2p
-    bonus += 0.8;
+    if (plantation === "Corn") {
+      // Corn dupe is still very strong in 2p shipping pressure.
+      bonus += 0.9;
+    } else if (plantation === "Indigo") {
+      // Matching indigo is only a mild boost – you often prefer better goods or Builder.
+      bonus += 0.2;
+    } else {
+      // Other crops: moderate synergy
+      bonus += 0.6;
+    }
   }
 
   const all = [playerBoard.startingPlantation, ...playerBoard.extraPlantations];
   const uniqueTypes = new Set(all);
+
   if (!uniqueTypes.has(plantation)) {
-    // A bit of credit for diversification
-    bonus += 0.4;
+    // Early diversification is quite nice, especially if you're Indigo starter.
+    bonus += 0.5;
   }
 
   return bonus;
@@ -29,7 +49,7 @@ function plantationSynergyBonus(plantation, playerBoard) {
 function plantationDenyBonus(plantation, opponentBoard) {
   let bonus = 0;
   if (plantation === opponentBoard.startingPlantation) {
-    // Deny the opponent another copy of their main crop
+    // Denying more corn to a Corn starter, or more indigo to Indigo starter, has some value.
     bonus += 0.4;
   }
   return bonus;
@@ -40,8 +60,7 @@ function scorePlantationChoice(plantation, you, opponent, context) {
   const synergy = plantationSynergyBonus(plantation, you);
   const deny = plantationDenyBonus(plantation, opponent);
 
-  // Earlier picks in the round matter more for shaping your engine.
-  const earlyTurnBonus = context.turnNumber <= 2 ? 0.5 : 0;
+  const earlyTurnBonus = context.turnNumber <= 2 ? 0.4 : 0;
 
   return base + synergy + deny + earlyTurnBonus;
 }
@@ -52,19 +71,21 @@ function describePlantationReason(plantation, you, opponent) {
   if (plantation === "Corn") {
     parts.push("Corn is extremely strong early because it produces without a building and gives fast shipping pressure in 2-player.");
   } else if (plantation === "Indigo") {
-    parts.push("Indigo is solid early and sets up for cheap early production buildings.");
+    parts.push("Indigo is weaker economically than corn; it mainly shines once you have the matching indigo production building.");
+  } else if (plantation === "Sugar") {
+    parts.push("Sugar is a higher-value good that scores well once the Sugar Mill is in place, making it an appealing early pick.");
   } else {
-    parts.push(`${plantation} is a higher-value export that pays off once production buildings are online.`);
+    parts.push(`${plantation} is a high-value export that pays off once the right production building is online.`);
   }
 
   if (plantation === you.startingPlantation) {
-    parts.push("It matches your starting plantation, reinforcing your main production line.");
+    parts.push("It matches your starting plantation, reinforcing that production line.");
   } else {
     parts.push("It diversifies your plantations, giving you more flexibility later.");
   }
 
   if (plantation === opponent.startingPlantation) {
-    parts.push("It also denies the opponent another copy of their starting crop.");
+    parts.push("It also denies the opponent another copy of their main crop.");
   }
 
   return parts.join(" ");
@@ -75,7 +96,7 @@ function describePlantationReason(plantation, you, opponent) {
 function scoreProspector(you, context) {
   let score = 2.0;
   if (you.doubloons <= 2) score += 0.7;
-  if (context.turnNumber <= 2) score -= 0.2; // often want early plantations first
+  if (context.turnNumber <= 2) score -= 0.2; // often want a strong plantation or Builder first
   return score;
 }
 
@@ -86,34 +107,44 @@ function explainProspector(you, context) {
     bits.push("Because your money is low, the extra coin is especially attractive.");
   }
   if (context.turnNumber >= 3) {
-    bits.push("Later in the round, the best plantations may already be taken, making money relatively better.");
+    bits.push("Later in the round, some strong plantations may already be gone, making money comparatively better.");
   }
   return bits.join(" ");
 }
 
 function scoreBuilder(you, context) {
-  // Simple placeholder: builder is decent if you have 3+ doubloons,
-  // and a bit better later in the round when plantations are mostly chosen.
-  let score = 1.2;
-  if (you.doubloons >= 3) score += 0.8;
-  if (context.turnNumber >= 3) score += 0.4;
+  // Core idea from your note:
+  // If you can get the matching small production building for your starting crop early,
+  // that's often better than just another indigo tile.
+  let score = 1.5;
+
+  // If you have 3+ doubloons early, strongly prefer Builder –
+  // we treat this as "you can probably buy your key small production building".
+  if (you.doubloons >= 3 && context.turnNumber <= 3) {
+    score += 2.0;
+  } else if (you.doubloons >= 3) {
+    score += 1.2;
+  }
+
   return score;
 }
 
 function explainBuilder(you, context) {
   const bits = [];
-  bits.push("Builder can be strong if you can afford an impactful early building (e.g., Small Market, Hacienda).");
-  if (you.doubloons < 3) {
-    bits.push("Right now your money is limited, so your building options may be constrained.");
+  bits.push("Builder can be very strong early if you can buy a small production building that matches your starting crop (e.g., Small Indigo Plant or Sugar Mill).");
+  if (you.doubloons >= 3) {
+    bits.push("With 3+ doubloons, you have the buying power to actually grab one of those key buildings right now.");
+  } else {
+    bits.push("Your current money is limited, so your building options may be constrained.");
   }
-  if (context.turnNumber >= 3) {
-    bits.push("Later in the round, locking in a building before the next production/shipping cycle can be valuable.");
+  if (context.turnNumber <= 3) {
+    bits.push("Doing this early sets up production and shipping before your opponent fully spins up.");
   }
   return bits.join(" ");
 }
 
 function scoreOtherRole(role, context) {
-  // Round-1 2-player: non-Settler roles are usually lower priority.
+  // Round-1 2-player: non-Settler, non-Builder roles are usually lower priority.
   switch (role) {
     case "Mayor":
       return 0.6;
@@ -131,15 +162,15 @@ function scoreOtherRole(role, context) {
 function explainOtherRole(role) {
   switch (role) {
     case "Mayor":
-      return "Mayor can help place colonists, but very early you usually have few buildings or plantations to staff.";
+      return "Mayor can help place colonists, but very early you usually have few buildings or plantations to staff, so it’s rarely the best opening pick.";
     case "Craftsman":
-      return "Craftsman is rarely strong in the very first round before a bigger production engine is online.";
+      return "Craftsman is rarely strong in the very first round before a larger production engine is online.";
     case "Trader":
       return "Trader tends to be low-impact in the opening when there are few goods to sell.";
     case "Captain":
-      return "Captain is almost never ideal this early; shipments are limited and you don’t want to prematurely clear goods.";
+      return "Captain is almost never ideal this early; shipments are limited and you usually don’t want to prematurely clear goods.";
     default:
-      return "This role is usually lower priority in the opening compared to Settler and Prospector.";
+      return "This role is usually lower priority in the opening compared to Settler, Builder, and sometimes Prospector.";
   }
 }
 
@@ -193,10 +224,10 @@ function recommendMoves(state) {
   return recommendations;
 }
 
-// --- UI wiring ---
+// --- UI wiring & state reading ---
 
 function readStateFromUI() {
-  // Official 2-player: starting plantations are fixed
+  const governorSelect = document.getElementById("governor-select").value;
   const yourDoubloons = Number(document.getElementById("your-doubloons").value || 0);
   const oppDoubloons = Number(document.getElementById("opp-doubloons").value || 0);
   const turnNumber = Number(document.getElementById("turn-number").value);
@@ -210,15 +241,19 @@ function readStateFromUI() {
 
   const oppLastRole = document.getElementById("opp-last-role").value || null;
 
+  // Starting plantations depend on who is Governor
+  const youStart = governorSelect === "you" ? "Indigo" : "Corn";
+  const oppStart = governorSelect === "you" ? "Corn" : "Indigo";
+
   const you = {
-    startingPlantation: "Indigo",
-    extraPlantations: [], // later we can track what you’ve already taken
+    startingPlantation: youStart,
+    extraPlantations: [], // later we can remember what you’ve already taken
     buildings: [],
     doubloons: yourDoubloons
   };
 
   const opponent = {
-    startingPlantation: "Corn",
+    startingPlantation: oppStart,
     extraPlantations: [],
     buildings: [],
     doubloons: oppDoubloons,
