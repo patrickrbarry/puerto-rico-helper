@@ -1,3 +1,8 @@
+// --- Simple in-memory session state (persists while page is open) ---
+const sessionState = {
+  extraPlantations: [] // your plantations beyond starting
+};
+
 // --- Scoring constants & helpers ---
 
 // Base values reflect that:
@@ -113,7 +118,7 @@ function explainProspector(you, context) {
 }
 
 function scoreBuilder(you, context) {
-  // Core idea from your note:
+  // Core idea:
   // If you can get the matching small production building for your starting crop early,
   // that's often better than just another indigo tile.
   let score = 1.5;
@@ -189,7 +194,7 @@ function recommendMoves(state) {
       const score = scorePlantationChoice(plantation, you, opponent, context);
       const title = `Take Settler → choose ${plantation}`;
       const explanation = describePlantationReason(plantation, you, opponent);
-      recommendations.push({ score, title, explanation });
+      recommendations.push({ score, title, explanation, role: "Settler", plantation });
     }
   }
 
@@ -198,7 +203,7 @@ function recommendMoves(state) {
     const score = scoreProspector(you, context);
     const title = "Take Prospector";
     const explanation = explainProspector(you, context);
-    recommendations.push({ score, title, explanation });
+    recommendations.push({ score, title, explanation, role: "Prospector" });
   }
 
   // Builder
@@ -206,7 +211,7 @@ function recommendMoves(state) {
     const score = scoreBuilder(you, context);
     const title = "Take Builder";
     const explanation = explainBuilder(you, context);
-    recommendations.push({ score, title, explanation });
+    recommendations.push({ score, title, explanation, role: "Builder" });
   }
 
   // Other roles
@@ -215,7 +220,7 @@ function recommendMoves(state) {
     const score = scoreOtherRole(role, context);
     const title = `Take ${role}`;
     const explanation = explainOtherRole(role);
-    recommendations.push({ score, title, explanation });
+    recommendations.push({ score, title, explanation, role });
   }
 
   // Sort best to worst
@@ -247,7 +252,7 @@ function readStateFromUI() {
 
   const you = {
     startingPlantation: youStart,
-    extraPlantations: [], // future: track what you’ve already taken
+    extraPlantations: sessionState.extraPlantations,
     buildings: [],
     doubloons: yourDoubloons
   };
@@ -281,6 +286,10 @@ function renderRecommendations(recs) {
 
   recs.slice(0, 5).forEach(rec => {
     const li = document.createElement("li");
+
+    // Store role + plantation info as data attributes so clicking can apply state
+    li.dataset.role = rec.role || "";
+    li.dataset.plantation = rec.plantation || "";
 
     const title = document.createElement("div");
     title.className = "recommendation-title";
@@ -320,6 +329,9 @@ document.addEventListener("DOMContentLoaded", () => {
       oppDoubloonsInput.value = "3";
     }
 
+    // Reset extra plantations for a new perspective if you flip Governor
+    sessionState.extraPlantations = [];
+
     // Clear previous recommendations when you flip roles
     if (!resultsSection.classList.contains("hidden")) {
       list.innerHTML = "";
@@ -343,11 +355,56 @@ document.addEventListener("DOMContentLoaded", () => {
     });
   }
 
+  function advancePickNumber() {
+    const isGovernor = governorSelect.value === "you";
+    const picks = isGovernor ? [1, 3, 5] : [2, 4, 6];
+    const current = Number(turnSelect.value);
+    const idx = picks.indexOf(current);
+    if (idx >= 0 && idx < picks.length - 1) {
+      turnSelect.value = String(picks[idx + 1]);
+    }
+    // If already at your last pick, we silently stay there.
+  }
+
+  function applyChosenMove(role, plantation) {
+    // Update session state based on chosen move
+    if (role === "Settler" && plantation) {
+      // Record that you picked this plantation
+      sessionState.extraPlantations.push(plantation);
+      // In this simplified version we don't alter the visible plantation row,
+      // since Settler can't be chosen again this round anyway.
+    }
+
+    // Remove chosen role from available roles (uncheck it)
+    if (role) {
+      const roleCheckbox = document.querySelector(`.role[value="${role}"]`);
+      if (roleCheckbox) {
+        roleCheckbox.checked = false;
+      }
+    }
+
+    // Advance to your next pick in the round (if any)
+    advancePickNumber();
+
+    // Clear previous recommendations
+    list.innerHTML = "";
+    resultsSection.classList.add("hidden");
+  }
+
   // When you click "Recommend"
   button.addEventListener("click", () => {
     const state = readStateFromUI();
     const recs = recommendMoves(state);
     renderRecommendations(recs);
+  });
+
+  // Make recommendations clickable: tap to apply move + advance
+  list.addEventListener("click", (event) => {
+    const li = event.target.closest("li");
+    if (!li) return;
+    const role = li.dataset.role || "";
+    const plantation = li.dataset.plantation || "";
+    applyChosenMove(role, plantation);
   });
 
   // When you change who is Governor, update the defaults
