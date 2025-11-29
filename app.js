@@ -10,10 +10,11 @@ const sessionState = {
   },
   // simple per-session preference tracker
   feedbackCounts: {},         // key -> count
-  turnInRound: 1              // 1–6 for the first round
+  turnInRound: 1,             // 1–6 for the first round
+  roundNumber: 1              // we’re focusing on early rounds, start at 1
 };
 
-// --- Building definitions (early-game focus) ---
+// --- Building definitions used for AI scoring (subset, early-game focus) ---
 const BUILDINGS = [
   {
     name: "Small Indigo Plant",
@@ -23,7 +24,7 @@ const BUILDINGS = [
     baseValue: 3.0
   },
   {
-    name: "Sugar Mill",
+    name: "Small Sugar Mill",
     type: "production",
     crop: "Sugar",
     cost: 2,
@@ -44,6 +45,38 @@ const BUILDINGS = [
     baseValue: 2.8
   }
 ];
+
+// --- Cost map for all base-game buildings we allow in selectors ---
+const BUILDING_COSTS = {
+  "Small Indigo Plant": 1,
+  "Small Sugar Mill": 2,
+  "Indigo Plant": 3,
+  "Sugar Mill": 4,
+  "Tobacco Storage": 5,
+  "Coffee Roaster": 6,
+
+  "Small Market": 1,
+  "Hacienda": 2,
+  "Construction Hut": 2,
+  "Small Warehouse": 3,
+  "Hospice": 4,
+  "Office": 5,
+  "Large Market": 5,
+  "Large Warehouse": 6,
+  "University": 8,
+  "Factory": 7,
+  "Harbor": 8,
+  "Wharf": 9,
+
+  "Guild Hall": 10,
+  "Residence": 10,
+  "Fortress": 10,
+  "Customs House": 10,
+  "City Hall": 10,
+
+  // treat "Other" and unknowns as costless for now
+  "Other": 0
+};
 
 // --- Move preference helpers ---
 
@@ -163,7 +196,7 @@ function describePlantationReason(plantation, you, opponent) {
   return parts.join(" ");
 }
 
-// --- Builder logic: score specific buildings ---
+// --- Builder logic: score specific buildings (subset) ---
 
 function hasBuilding(buildings, name) {
   return buildings.includes(name);
@@ -239,27 +272,6 @@ function explainProspector(you, context) {
   }
   if (context.turnNumber >= 3) {
     bits.push("Later in the round, some strong plantations may already be gone, making money comparatively better.");
-  }
-  return bits.join(" ");
-}
-
-function scoreBuilderRole(you, context) {
-  const options = getBuilderOptions(you, context);
-  if (options.length === 0) return 0.5;
-  const best = options[0].score;
-  return best + 0.2;
-}
-
-function explainBuilderRole(you, context) {
-  const bits = [];
-  bits.push("Builder lets you convert your doubloons into long-term engine pieces.");
-  if (you.doubloons >= 3) {
-    bits.push("With 3+ doubloons, you can often buy a key early building like a production plant or Hacienda.");
-  } else {
-    bits.push("With limited money, your options are narrower, but cheap buildings like Small Indigo Plant or Small Market may still be attractive.");
-  }
-  if (context.turnNumber <= 3) {
-    bits.push("Doing this early sets up production and shipping before your opponent fully spins up.");
   }
   return bits.join(" ");
 }
@@ -349,7 +361,7 @@ function recommendMoves(state) {
     recommendations.push({ score, title, explanation, role: "Prospector" });
   }
 
-  // Builder – with specific building options
+  // Builder – with specific building options (subset)
   if (roundState.availableRoles.includes("Builder")) {
     const builderOptions = getBuilderOptions(you, context);
     if (builderOptions.length === 0) {
@@ -366,7 +378,7 @@ function recommendMoves(state) {
         score += feedbackBonus("Builder", null, building.name);
 
         const title = `Take Builder → buy ${building.name}`;
-        const explanation = explainBuilderRole(you, context);
+        const explanation = "Builder lets you convert your doubloons into long-term engine pieces, especially strong early when paired with core production or economy buildings.";
         recommendations.push({
           score,
           title,
@@ -484,12 +496,14 @@ function updateStateDisplays() {
 
 function updateTurnDisplay() {
   const display = document.getElementById("round-turn-display");
+  const summary = document.getElementById("round-summary");
   const govSelect = document.getElementById("governor-select");
   if (!display || !govSelect) return;
 
   const isGovernor = govSelect.value === "you";
   const yourPicks = isGovernor ? [1, 3, 5] : [2, 4, 6];
   const t = sessionState.turnInRound;
+  const r = sessionState.roundNumber;
 
   let whose;
   if (yourPicks.includes(t)) {
@@ -502,12 +516,15 @@ function updateTurnDisplay() {
 
   let text;
   if (t <= 6) {
-    text = `Turn in this round: ${t} of 6 – it is ${whose}.`;
+    text = `Round ${r} – Turn ${t} of 6 – it is ${whose}.`;
   } else {
-    text = `Turn in this round: 6 of 6 – round complete (advance to next round manually).`;
+    text = `Round ${r} – Turn 6 of 6 – round complete (advance to next round manually).`;
   }
 
   display.textContent = text;
+  if (summary) {
+    summary.textContent = `Round ${r} – Turn ${Math.min(t, 6)} of 6.`;
+  }
 }
 
 // Limit Settler choices for opponent/manual to actual tiles + quarry
@@ -658,6 +675,7 @@ document.addEventListener("DOMContentLoaded", () => {
     sessionState.opponent.buildings = [];
     sessionState.feedbackCounts = {};
     sessionState.turnInRound = 1;
+    sessionState.roundNumber = 1;
 
     // Reset quarries to full supply for a fresh board
     quarriesRemainingInput.value = "5";
@@ -725,12 +743,14 @@ document.addEventListener("DOMContentLoaded", () => {
       }
     }
 
-    if (role === "Builder" && buildingName && buildingName !== "Other") {
-      const buildingDef = BUILDINGS.find(b => b.name === buildingName);
-      if (buildingDef && !sessionState.buildings.includes(buildingName)) {
+    if (role === "Builder" && buildingName) {
+      if (!sessionState.buildings.includes(buildingName)) {
         sessionState.buildings.push(buildingName);
+      }
+      const cost = BUILDING_COSTS[buildingName] || 0;
+      if (cost > 0) {
         const currentMoney = Number(yourDoubloonsInput.value || 0);
-        const newMoney = Math.max(0, currentMoney - buildingDef.cost);
+        const newMoney = Math.max(0, currentMoney - cost);
         yourDoubloonsInput.value = String(newMoney);
       }
     }
@@ -776,12 +796,14 @@ document.addEventListener("DOMContentLoaded", () => {
 
     if (role === "Builder") {
       const buildingName = oppBuilderBuildingSelect.value;
-      if (buildingName && buildingName !== "Other") {
-        const buildingDef = BUILDINGS.find(b => b.name === buildingName);
-        if (buildingDef && !sessionState.opponent.buildings.includes(buildingName)) {
+      if (buildingName && buildingName !== "") {
+        if (!sessionState.opponent.buildings.includes(buildingName)) {
           sessionState.opponent.buildings.push(buildingName);
+        }
+        const cost = BUILDING_COSTS[buildingName] || 0;
+        if (cost > 0) {
           const currentMoney = Number(oppDoubloonsInput.value || 0);
-          const newMoney = Math.max(0, currentMoney - buildingDef.cost);
+          const newMoney = Math.max(0, currentMoney - cost);
           oppDoubloonsInput.value = String(newMoney);
         }
       }
