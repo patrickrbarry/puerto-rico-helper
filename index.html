@@ -56,7 +56,10 @@
 
     <section class="card">
       <h2>Face-up Plantations</h2>
-      <p class="hint">2-player = 3 face-up tiles. Leave “None” where there is no tile.</p>
+      <p class="hint">
+        2-player = 3 face-up tiles. When you (or your opponent) take one,
+        update this row to match the board.
+      </p>
 
       <div class="field-row">
         <label for="p1">Tile 1</label>
@@ -98,6 +101,8 @@
       <p class="hint">
         Check the roles that are still available when it’s your turn to pick.
         (2-player: 7 total roles, 6 are chosen, 1 is left over with a coin.)
+        When you tap a recommendation or set the opponent’s last pick, the
+        corresponding role will be removed here.
       </p>
       <div class="roles">
         <label><input type="checkbox" class="role" value="Settler" checked /> Settler</label>
@@ -111,7 +116,7 @@
     </section>
 
     <section class="card">
-      <h2>Opponent’s Last Pick (optional)</h2>
+      <h2>Opponent’s Last Pick</h2>
       <div class="field-row">
         <label for="opp-last-role">Role they just chose</label>
         <select id="opp-last-role">
@@ -125,6 +130,10 @@
           <option value="Prospector">Prospector</option>
         </select>
       </div>
+      <p class="hint">
+        When you select a role here, it will be removed from the available roles and
+        considered used for future recommendations.
+      </p>
     </section>
 
     <button id="recommend-btn">Recommend my move</button>
