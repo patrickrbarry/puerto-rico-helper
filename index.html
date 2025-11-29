@@ -1,6 +1,6 @@
 <!DOCTYPE html>
 <html lang="en">
-head>
+<head>
   <meta charset="UTF-8" />
   <title>Puerto Rico Opening Helper</title>
   <meta name="viewport" content="width=device-width, initial-scale=1" />
@@ -195,6 +195,64 @@ head>
       <h2>Recommendations</h2>
       <p class="hint">Tap a recommendation to apply it and advance your pick.</p>
       <ol id="recommendation-list"></ol>
+
+      <hr />
+
+      <button id="manual-choice-toggle">I chose something else</button>
+
+      <div id="manual-choice-panel" class="hidden" style="margin-top: 0.5rem;">
+        <h3>Record your actual move</h3>
+        <p class="hint">
+          This will update the state just like a recommendation. Your note helps you remember
+          why you deviated, and the app will slightly favor similar moves for the rest of this session.
+        </p>
+
+        <div class="field-row">
+          <label for="manual-role">Role you chose</label>
+          <select id="manual-role">
+            <option value="">(select)</option>
+            <option value="Settler">Settler</option>
+            <option value="Mayor">Mayor</option>
+            <option value="Builder">Builder</option>
+            <option value="Craftsman">Craftsman</option>
+            <option value="Trader">Trader</option>
+            <option value="Captain">Captain</option>
+            <option value="Prospector">Prospector</option>
+          </select>
+        </div>
+
+        <div class="field-row">
+          <label for="manual-plantation">If Settler: what did you take?</label>
+          <select id="manual-plantation">
+            <option value="">(n/a)</option>
+            <option value="Corn">Corn plantation</option>
+            <option value="Indigo">Indigo plantation</option>
+            <option value="Sugar">Sugar plantation</option>
+            <option value="Tobacco">Tobacco plantation</option>
+            <option value="Coffee">Coffee plantation</option>
+            <option value="Quarry">Quarry</option>
+          </select>
+        </div>
+
+        <div class="field-row">
+          <label for="manual-building">If Builder: what did you build?</label>
+          <select id="manual-building">
+            <option value="">(n/a)</option>
+            <option value="Small Indigo Plant">Small Indigo Plant</option>
+            <option value="Sugar Mill">Sugar Mill</option>
+            <option value="Small Market">Small Market</option>
+            <option value="Hacienda">Hacienda</option>
+            <option value="Other">Other / unknown</option>
+          </select>
+        </div>
+
+        <div class="field-row">
+          <label for="manual-reason">Why did you choose this?</label>
+          <textarea id="manual-reason" rows="2" placeholder="Optional note for yourself"></textarea>
+        </div>
+
+        <button id="manual-apply-btn">Apply my move</button>
+      </div>
     </section>
 
     <script src="app.js"></script>
