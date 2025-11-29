@@ -1,7 +1,9 @@
 // --- Scoring constants & helpers ---
 
-// Base values reflect your comment: sugar / higher-value goods are strong;
-// indigo is weaker; corn still excellent as the pure economy starter.
+// Base values reflect that:
+// - Corn is still the best raw economy starter
+// - Sugar / other higher-value goods are strong once buildings are in place
+// - Indigo is weaker unless paired with its production building
 const PLANTATION_VALUES_BASE = {
   Corn: 3.1,
   Sugar: 2.8,
@@ -10,24 +12,21 @@ const PLANTATION_VALUES_BASE = {
   Coffee: 2.3
 };
 
+// Placeholder for future: we don't yet track buildings
 function hasProductionForStartingCrop(playerBoard) {
-  // v0: we don't track buildings yet, so assume:
-  // if we take Builder and have enough money early, we can get
-  // the matching small production building. This function is
-  // here as a placeholder hook for when we actually track buildings.
   return false;
 }
 
 function plantationSynergyBonus(plantation, playerBoard) {
   let bonus = 0;
 
-  // Synergy for matching your starting crop depends on WHICH crop.
+  // Synergy for matching starting crop depends on which crop it is.
   if (plantation === playerBoard.startingPlantation) {
     if (plantation === "Corn") {
-      // Corn dupe is still very strong in 2p shipping pressure.
+      // Corn dupe is very strong in 2p shipping pressure.
       bonus += 0.9;
     } else if (plantation === "Indigo") {
-      // Matching indigo is only a mild boost – you often prefer better goods or Builder.
+      // Matching indigo is only a mild boost – often prefer better goods or Builder.
       bonus += 0.2;
     } else {
       // Other crops: moderate synergy
@@ -60,6 +59,7 @@ function scorePlantationChoice(plantation, you, opponent, context) {
   const synergy = plantationSynergyBonus(plantation, you);
   const deny = plantationDenyBonus(plantation, opponent);
 
+  // Earlier picks in the round have slightly more shaping power.
   const earlyTurnBonus = context.turnNumber <= 2 ? 0.4 : 0;
 
   return base + synergy + deny + earlyTurnBonus;
@@ -96,7 +96,7 @@ function describePlantationReason(plantation, you, opponent) {
 function scoreProspector(you, context) {
   let score = 2.0;
   if (you.doubloons <= 2) score += 0.7;
-  if (context.turnNumber <= 2) score -= 0.2; // often want a strong plantation or Builder first
+  if (context.turnNumber <= 2) score -= 0.2; // early you often want strong plantation or Builder first
   return score;
 }
 
@@ -119,7 +119,7 @@ function scoreBuilder(you, context) {
   let score = 1.5;
 
   // If you have 3+ doubloons early, strongly prefer Builder –
-  // we treat this as "you can probably buy your key small production building".
+  // treat this as "you can probably buy your key small production building".
   if (you.doubloons >= 3 && context.turnNumber <= 3) {
     score += 2.0;
   } else if (you.doubloons >= 3) {
@@ -247,7 +247,7 @@ function readStateFromUI() {
 
   const you = {
     startingPlantation: youStart,
-    extraPlantations: [], // later we can remember what you’ve already taken
+    extraPlantations: [], // future: track what you’ve already taken
     buildings: [],
     doubloons: yourDoubloons
   };
@@ -298,6 +298,8 @@ function renderRecommendations(recs) {
   resultsSection.classList.remove("hidden");
 }
 
+// --- DOMContentLoaded: hook up events & dynamic behavior ---
+
 document.addEventListener("DOMContentLoaded", () => {
   const button = document.getElementById("recommend-btn");
   const governorSelect = document.getElementById("governor-select");
@@ -305,6 +307,7 @@ document.addEventListener("DOMContentLoaded", () => {
   const oppDoubloonsInput = document.getElementById("opp-doubloons");
   const resultsSection = document.getElementById("results");
   const list = document.getElementById("recommendation-list");
+  const turnSelect = document.getElementById("turn-number");
 
   function syncDoubloonsToGovernor() {
     if (governorSelect.value === "you") {
@@ -324,6 +327,22 @@ document.addEventListener("DOMContentLoaded", () => {
     }
   }
 
+  function populatePickNumbers() {
+    const isGovernor = governorSelect.value === "you";
+    const yourPicks = isGovernor ? [1, 3, 5] : [2, 4, 6];
+
+    // Clear existing options
+    turnSelect.innerHTML = "";
+
+    // Populate with your valid picks
+    yourPicks.forEach(n => {
+      const opt = document.createElement("option");
+      opt.value = n;
+      opt.textContent = `${n} (your pick)`;
+      turnSelect.appendChild(opt);
+    });
+  }
+
   // When you click "Recommend"
   button.addEventListener("click", () => {
     const state = readStateFromUI();
@@ -331,10 +350,13 @@ document.addEventListener("DOMContentLoaded", () => {
     renderRecommendations(recs);
   });
 
-  // When you change who is Governor, update the default money
-  governorSelect.addEventListener("change", syncDoubloonsToGovernor);
+  // When you change who is Governor, update the defaults
+  governorSelect.addEventListener("change", () => {
+    syncDoubloonsToGovernor();
+    populatePickNumbers();
+  });
 
-  // Initialize once on load to match the default selector value
+  // Initialize once on load
   syncDoubloonsToGovernor();
+  populatePickNumbers();
 });
-
