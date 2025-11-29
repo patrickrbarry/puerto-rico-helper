@@ -52,6 +52,10 @@
         leaving 1 unused role with a coin. If you are Governor, your picks are 1, 3, 5.
         If the opponent is Governor, your picks are 2, 4, 6.
       </p>
+
+      <p id="round-turn-display" class="hint">
+        Turn in this round: 1 of 6 – it is your pick.
+      </p>
     </section>
 
     <section class="card">
@@ -159,13 +163,8 @@
       <div class="field-row">
         <label for="opp-settler-gain">If Settler: what did they take?</label>
         <select id="opp-settler-gain">
+          <!-- options populated dynamically based on actual tiles + quarry -->
           <option value="">(n/a or unknown)</option>
-          <option value="Corn">Corn plantation</option>
-          <option value="Indigo">Indigo plantation</option>
-          <option value="Sugar">Sugar plantation</option>
-          <option value="Tobacco">Tobacco plantation</option>
-          <option value="Coffee">Coffee plantation</option>
-          <option value="Quarry">Quarry</option>
         </select>
       </div>
 
@@ -224,13 +223,8 @@
         <div class="field-row">
           <label for="manual-plantation">If Settler: what did you take?</label>
           <select id="manual-plantation">
+            <!-- populated dynamically from actual tiles + quarry -->
             <option value="">(n/a)</option>
-            <option value="Corn">Corn plantation</option>
-            <option value="Indigo">Indigo plantation</option>
-            <option value="Sugar">Sugar plantation</option>
-            <option value="Tobacco">Tobacco plantation</option>
-            <option value="Coffee">Coffee plantation</option>
-            <option value="Quarry">Quarry</option>
           </select>
         </div>
 
