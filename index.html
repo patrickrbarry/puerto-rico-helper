@@ -9,14 +9,26 @@
 <body>
   <div class="app">
     <h1>Puerto Rico Opening Helper</h1>
-    <p class="subtitle">2-player official variant – Round 1 focus</p>
+    <p class="subtitle">2-player official variant – early-round advisor</p>
 
     <section class="card">
-      <h2>2-Player Setup (fixed)</h2>
+      <h2>Who are you this round?</h2>
+
+      <div class="field-row">
+        <label for="governor-select">Are you the Governor (first player)?</label>
+        <select id="governor-select">
+          <option value="you">Yes, I am the Governor</option>
+          <option value="opponent">No, opponent is Governor</option>
+        </select>
+      </div>
+
       <p class="hint">
-        Official 2-player variant: Governor starts with <b>Indigo + 3 doubloons</b>,
-        second player with <b>Corn + 2 doubloons</b>. We hard-code the plantations
-        and you can adjust doubloons if they change mid-round.
+        Official 2-player start:
+        <br />
+        – Governor: <b>Indigo + 3 doubloons</b><br />
+        – Second player: <b>Corn + 2 doubloons</b><br />
+        The helper uses this to assign starting plantations; you can still adjust
+        doubloons below if they change.
       </p>
 
       <div class="field-row">
@@ -42,15 +54,15 @@
       </div>
 
       <p class="hint">
-        In the official 2-player rules, each round both players alternate choosing
-        roles until each has taken 3 (6 total), leaving 1 unused role with a coin.
-        This selector is just telling the helper how early/late in the round you are.
+        In 2-player, you alternate picking until each player has chosen 3 roles (6 total),
+        leaving 1 unused role with a coin. The pick number is just “how early or late in
+        the round is this choice?”
       </p>
     </section>
 
     <section class="card">
       <h2>Face-up Plantations</h2>
-      <p class="hint">2-player = 3 face-up tiles. Leave any unused slot as “None”.</p>
+      <p class="hint">2-player = 3 face-up tiles. Leave “None” where there is no tile.</p>
 
       <div class="field-row">
         <label for="p1">Tile 1</label>
@@ -91,7 +103,7 @@
       <h2>Available Roles</h2>
       <p class="hint">
         Check the roles that are still available when it’s your turn to pick.
-        (Official 2-player: 7 total roles, 6 chosen each round, 1 left over.)
+        (2-player: 7 total roles, 6 are chosen, 1 is left over with a coin.)
       </p>
       <div class="roles">
         <label><input type="checkbox" class="role" value="Settler" checked /> Settler</label>
@@ -119,10 +131,6 @@
           <option value="Prospector">Prospector</option>
         </select>
       </div>
-      <p class="hint">
-        This doesn’t affect the math much yet but gives context and will matter more
-        as we refine the engine.
-      </p>
     </section>
 
     <button id="recommend-btn">Recommend my move</button>
